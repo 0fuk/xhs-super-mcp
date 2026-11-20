@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -504,6 +505,91 @@ func (s *XiaohongshuService) LikeFeed(ctx context.Context, feedID, xsecToken str
 		return nil, err
 	}
 	return &ActionResult{FeedID: feedID, Success: true, Message: "点赞成功或已点赞"}, nil
+}
+
+func (s *XiaohongshuService) ReportNote(ctx context.Context, feedID, xsecToken, reason, desc string) (*ActionResult, error) {
+	if err := consumeReportQuota(); err != nil {
+		return nil, err
+	}
+
+	b := newBrowser()
+	defer b.Close()
+
+	page := b.NewPage()
+	defer page.Close()
+
+	action := xiaohongshu.NewReportAction(page)
+	if err := action.ReportNote(ctx, feedID, xsecToken, reason, desc); err != nil {
+		refundReportQuota()
+		return nil, err
+	}
+	return &ActionResult{FeedID: feedID, Success: true, Message: "举报已提交并看到成功提示"}, nil
+}
+
+var reportQuotaMu sync.Mutex
+
+func consumeReportQuota() error {
+	reportQuotaMu.Lock()
+	defer reportQuotaMu.Unlock()
+
+	day, n, err := readReportQuota()
+	if err != nil {
+		return err
+	}
+	today := time.Now().Format("2006-01-02")
+	if day != today {
+		day, n = today, 0
+	}
+	if n >= 95 {
+		return fmt.Errorf("已达本地每日举报上限 95")
+	}
+	return writeReportQuota(day, n+1)
+}
+
+func refundReportQuota() {
+	reportQuotaMu.Lock()
+	defer reportQuotaMu.Unlock()
+
+	day, n, err := readReportQuota()
+	if err != nil || n <= 0 {
+		return
+	}
+	if day != time.Now().Format("2006-01-02") {
+		return
+	}
+	_ = writeReportQuota(day, n-1)
+}
+
+func readReportQuota() (string, int, error) {
+	if err := os.MkdirAll("data", 0o755); err != nil {
+		return "", 0, err
+	}
+	raw, err := os.ReadFile("data/report_quota.json")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", 0, nil
+		}
+		return "", 0, err
+	}
+	var saved struct {
+		Day   string `json:"day"`
+		Count int    `json:"count"`
+	}
+	if err := json.Unmarshal(raw, &saved); err != nil {
+		return "", 0, nil
+	}
+	return saved.Day, saved.Count, nil
+}
+
+func writeReportQuota(day string, n int) error {
+	raw, err := json.Marshal(struct {
+		Day   string `json:"day"`
+		Count int    `json:"count"`
+	}{Day: day, Count: n})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile("data/report_quota.json", raw, 0o644)
 }
 
 // UnlikeFeed 取消点赞笔记
