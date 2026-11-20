@@ -102,6 +102,13 @@ type LikeFeedArgs struct {
 	Unlike    bool   `json:"unlike,omitempty" jsonschema:"是否取消点赞，true为取消点赞，false或未设置则为点赞"`
 }
 
+type ReportNoteArgs struct {
+	FeedID      string `json:"feed_id" jsonschema:"小红书笔记ID，从Feed列表获取"`
+	XsecToken   string `json:"xsec_token" jsonschema:"访问令牌，从Feed列表的xsecToken字段获取"`
+	Reason      string `json:"reason" jsonschema:"举报分类，必须与页面选项文案完全一致，例如不实信息、违法违规、搬运抄袭"`
+	Description string `json:"description" jsonschema:"举报描述，不超过200字。由调用方提供，工具不做内容判断"`
+}
+
 // FavoriteFeedArgs 收藏参数
 type FavoriteFeedArgs struct {
 	FeedID     string `json:"feed_id" jsonschema:"小红书笔记ID，从Feed列表获取"`
@@ -457,6 +464,28 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 				"unlike":     args.Unlike,
 			}
 			result := appServer.handleLikeFeed(ctx, argsMap)
+			return convertToMCPResult(result), nil, nil
+		}),
+	)
+
+	// 工具: 举报笔记
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "report_note",
+			Description: "举报指定笔记。调用方必须提供 feed_id、xsec_token、与页面一致的分类文案和不超过200字的描述。本地每日最多95次，失败不占额度。",
+			Annotations: &mcp.ToolAnnotations{
+				Title:           "Report Note",
+				DestructiveHint: boolPtr(true),
+			},
+		},
+		withPanicRecovery("report_note", func(ctx context.Context, req *mcp.CallToolRequest, args ReportNoteArgs) (*mcp.CallToolResult, any, error) {
+			argsMap := map[string]interface{}{
+				"feed_id":     args.FeedID,
+				"xsec_token":  args.XsecToken,
+				"reason":      args.Reason,
+				"description": args.Description,
+			}
+			result := appServer.handleReportNote(ctx, argsMap)
 			return convertToMCPResult(result), nil, nil
 		}),
 	)

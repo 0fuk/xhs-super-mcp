@@ -568,6 +568,31 @@ func (s *AppServer) handleLikeFeed(ctx context.Context, args map[string]interfac
 	return &MCPToolResult{Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("%s成功 - Feed ID: %s", action, res.FeedID)}}}
 }
 
+func (s *AppServer) handleReportNote(ctx context.Context, args map[string]interface{}) *MCPToolResult {
+	feedID, ok := args["feed_id"].(string)
+	if !ok || feedID == "" {
+		return &MCPToolResult{Content: []MCPContent{{Type: "text", Text: "操作失败: 缺少feed_id参数"}}, IsError: true}
+	}
+	xsecToken, ok := args["xsec_token"].(string)
+	if !ok || xsecToken == "" {
+		return &MCPToolResult{Content: []MCPContent{{Type: "text", Text: "操作失败: 缺少xsec_token参数"}}, IsError: true}
+	}
+	reason, ok := args["reason"].(string)
+	if !ok || reason == "" {
+		return &MCPToolResult{Content: []MCPContent{{Type: "text", Text: "操作失败: 缺少reason参数"}}, IsError: true}
+	}
+	desc, ok := args["description"].(string)
+	if !ok || desc == "" {
+		return &MCPToolResult{Content: []MCPContent{{Type: "text", Text: "操作失败: 缺少description参数"}}, IsError: true}
+	}
+
+	res, err := s.xiaohongshuService.ReportNote(ctx, feedID, xsecToken, reason, desc)
+	if err != nil {
+		return &MCPToolResult{Content: []MCPContent{{Type: "text", Text: "举报失败: " + err.Error()}}, IsError: true}
+	}
+	return &MCPToolResult{Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("举报成功 - Feed ID: %s - %s", res.FeedID, res.Message)}}}
+}
+
 // handleFavoriteFeed 处理收藏/取消收藏
 func (s *AppServer) handleFavoriteFeed(ctx context.Context, args map[string]interface{}) *MCPToolResult {
 	feedID, ok := args["feed_id"].(string)
